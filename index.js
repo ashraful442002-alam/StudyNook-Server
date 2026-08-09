@@ -1,4 +1,5 @@
 const express = require("express");
+const helmet = require("helmet");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
@@ -20,13 +21,17 @@ connectDB();
 // Middleware
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: process.env.CLIENT_URL || [
+      "http://localhost:5173",
+      "http://localhost:4173",
+    ],
     credentials: true,
   })
 );
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(helmet());
 
 // Routes
 app.get("/", (req, res) => {
