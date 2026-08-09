@@ -2,15 +2,15 @@ const express = require("express");
 
 const Booking = require("../models/Booking");
 const Room = require("../models/Room");
+const User = require("../models/User");
 const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
 
-// ==========================================
 // CREATE BOOKING
 // POST /api/bookings
-// ==========================================
+
 
 router.post("/", authMiddleware, async (req, res) => {
   try {
@@ -112,6 +112,17 @@ router.post("/", authMiddleware, async (req, res) => {
       specialNote: specialNote || "",
       status: "confirmed",
     });
+    await User.findByIdAndUpdate(req.user.id, {
+  $push: {
+    bookings: booking._id,
+  },
+});
+
+await Room.findByIdAndUpdate(roomId, {
+  $inc: {
+    bookingCount: 1,
+  },
+});
 
     // ==========================================
     // INCREMENT BOOKING COUNT
@@ -174,10 +185,10 @@ router.get("/my-bookings", authMiddleware, async (req, res) => {
 });
 
 
-// ==========================================
+
 // CANCEL BOOKING
 // PATCH /api/bookings/:id/cancel
-// ==========================================
+
 
 router.patch(
   "/:id/cancel",
@@ -263,5 +274,34 @@ router.patch(
   }
 );
 
+
+// GET MY BOOKINGS
+// GET /api/bookings/my-bookings
+
+router.get("/my-bookings", authMiddleware, async (req, res) => {
+  try {
+    const bookings = await Booking.find({
+      user: req.user.id,
+    })
+      .populate(
+        "room",
+        "name image floor capacity hourlyRate"
+      )
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: bookings.length,
+      bookings,
+    });
+  } catch (error) {
+    console.error("Get my bookings error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch your bookings.",
+    });
+  }
+});
 
 module.exports = router;
