@@ -7,10 +7,10 @@ const authMiddleware = require("../middleware/authMiddleware");
 const router = express.Router();
 
 
-
+// ==========================================
 // CREATE BOOKING
 // POST /api/bookings
-
+// ==========================================
 
 router.post("/", authMiddleware, async (req, res) => {
   try {
@@ -22,7 +22,7 @@ router.post("/", authMiddleware, async (req, res) => {
       specialNote,
     } = req.body;
 
-    // Required fields check
+    // Required fields
     if (
       !roomId ||
       !bookingDate ||
@@ -45,7 +45,7 @@ router.post("/", authMiddleware, async (req, res) => {
       });
     }
 
-    // Convert time to numbers
+    // Convert time
     const startHour = Number(startTime.split(":")[0]);
     const endHour = Number(endTime.split(":")[0]);
 
@@ -57,7 +57,7 @@ router.post("/", authMiddleware, async (req, res) => {
       });
     }
 
-    // Minimum 1 hour booking
+    // Minimum 1 hour
     if (endHour - startHour < 1) {
       return res.status(400).json({
         success: false,
@@ -65,9 +65,9 @@ router.post("/", authMiddleware, async (req, res) => {
       });
     }
 
-   
+    // ==========================================
     // CHECK BOOKING CONFLICT
-    
+    // ==========================================
 
     const existingBooking = await Booking.findOne({
       room: roomId,
@@ -90,17 +90,17 @@ router.post("/", authMiddleware, async (req, res) => {
       });
     }
 
-   
+    // ==========================================
     // CALCULATE TOTAL COST
-  
+    // ==========================================
 
     const duration = endHour - startHour;
 
     const totalCost = duration * room.hourlyRate;
 
-
+    // ==========================================
     // CREATE BOOKING
-
+    // ==========================================
 
     const booking = await Booking.create({
       user: req.user.id,
@@ -113,9 +113,9 @@ router.post("/", authMiddleware, async (req, res) => {
       status: "confirmed",
     });
 
- 
-    // INCREMENT ROOM BOOKING COUNT
-
+    // ==========================================
+    // INCREMENT BOOKING COUNT
+    // ==========================================
 
     await Room.findByIdAndUpdate(roomId, {
       $inc: {
@@ -128,7 +128,6 @@ router.post("/", authMiddleware, async (req, res) => {
       message: "Room booked successfully!",
       booking,
     });
-
   } catch (error) {
     console.error("Create booking error:", error);
 
@@ -138,6 +137,131 @@ router.post("/", authMiddleware, async (req, res) => {
     });
   }
 });
+
+
+// ==========================================
+// GET MY BOOKINGS
+// GET /api/bookings/my-bookings
+// ==========================================
+
+router.get("/my-bookings", authMiddleware, async (req, res) => {
+  try {
+    const bookings = await Booking.find({
+      user: req.user.id,
+    })
+      .populate(
+        "room",
+        "name image floor capacity hourlyRate"
+      )
+      .sort({
+        bookingDate: -1,
+        startTime: -1,
+      });
+
+    return res.status(200).json({
+      success: true,
+      count: bookings.length,
+      bookings,
+    });
+  } catch (error) {
+    console.error("Get my bookings error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch your bookings.",
+    });
+  }
+});
+
+
+// ==========================================
+// CANCEL BOOKING
+// PATCH /api/bookings/:id/cancel
+// ==========================================
+
+router.patch(
+  "/:id/cancel",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const booking = await Booking.findById(req.params.id);
+
+      // Booking not found
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found.",
+        });
+      }
+
+      // Ownership check
+      if (
+        String(booking.user) !==
+        String(req.user.id)
+      ) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You can only cancel your own booking.",
+        });
+      }
+
+      // Already cancelled
+      if (booking.status === "cancelled") {
+        return res.status(400).json({
+          success: false,
+          message: "This booking is already cancelled.",
+        });
+      }
+
+      // Check booking date
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const bookingDate = new Date(
+        `${booking.bookingDate}T00:00:00`
+      );
+
+      bookingDate.setHours(0, 0, 0, 0);
+
+      if (bookingDate < today) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Past bookings cannot be cancelled.",
+        });
+      }
+
+      // Update status
+      booking.status = "cancelled";
+
+      await booking.save();
+
+      // Decrease room booking count
+      await Room.findByIdAndUpdate(
+        booking.room,
+        {
+          $inc: {
+            bookingCount: -1,
+          },
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Booking cancelled",
+        booking,
+      });
+    } catch (error) {
+      console.error("Cancel booking error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to cancel booking.",
+      });
+    }
+  }
+);
 
 
 module.exports = router;
