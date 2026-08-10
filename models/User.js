@@ -33,6 +33,11 @@ const userSchema = new mongoose.Schema(
       default: "email",
     },
 
+    firebaseUid: {
+      type: String,
+      default: null,
+    },
+
     bookings: [
       {
         type: mongoose.Schema.Types.ObjectId,

@@ -2,6 +2,9 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const User = require("../models/User");
+const {
+  verifyFirebaseIdToken,
+} = require("../config/firebase");
 
 const createToken = (userId) => {
   return jwt.sign(
@@ -181,6 +184,94 @@ const login = async (req, res) => {
 };
 
 // ===============================
+// GOOGLE LOGIN (Firebase)
+// ===============================
+const googleLogin = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Firebase ID token is required.",
+      });
+    }
+
+    // Verify Firebase ID token
+    let decodedToken;
+
+    try {
+      decodedToken = await verifyFirebaseIdToken(idToken);
+    } catch (error) {
+      console.error("Firebase token verification error:", error);
+
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired Google token.",
+      });
+    }
+
+    const { name, email, picture, uid } = decodedToken;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Google account must have an email address.",
+      });
+    }
+
+    // Find existing user by email
+    let user = await User.findOne({
+      email: email.toLowerCase(),
+    });
+
+    if (!user) {
+      // Create a new Google user
+      user = await User.create({
+        name: name || email.split("@")[0],
+        email: email.toLowerCase(),
+        photoURL: picture || "",
+        password: null,
+        provider: "google",
+        firebaseUid: uid,
+      });
+    } else {
+      // Update photo/name from Google on every login
+      user.name = name || user.name;
+      user.photoURL = picture || user.photoURL;
+      user.provider = "google";
+      user.firebaseUid = uid;
+
+      await user.save();
+    }
+
+    // Generate JWT
+    const token = createToken(user._id.toString());
+
+    // Store JWT in HTTP-only cookie
+    sendTokenCookie(res, token);
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful.",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        photoURL: user.photoURL,
+      },
+    });
+  } catch (error) {
+    console.error("Google login error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong while signing in with Google.",
+    });
+  }
+};
+
+// ===============================
 // GET CURRENT USER
 // ===============================
 const getCurrentUser = async (req, res) => {
@@ -245,6 +336,7 @@ const logout = async (req, res) => {
 module.exports = {
   register,
   login,
+  googleLogin,
   getCurrentUser,
   logout,
 };
