@@ -1,35 +1,58 @@
+const fs = require("fs");
+const path = require("path");
 const admin = require("firebase-admin");
 
 let firebaseApp;
+
+const loadServiceAccount = () => {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+
+  if (serviceAccountJson) {
+    try {
+      const parsed = JSON.parse(serviceAccountJson);
+      if (parsed.project_id && parsed.client_email && parsed.private_key) {
+        return parsed;
+      }
+    } catch (error) {
+      console.warn(
+        "FIREBASE_SERVICE_ACCOUNT is not valid JSON, falling back to file path..."
+      );
+    }
+  }
+
+  if (serviceAccountPath) {
+    const resolvedPath = path.isAbsolute(serviceAccountPath)
+      ? serviceAccountPath
+      : path.resolve(process.cwd(), serviceAccountPath);
+
+    if (fs.existsSync(resolvedPath)) {
+      const parsed = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+      if (parsed.project_id && parsed.client_email && parsed.private_key) {
+        return parsed;
+      }
+    }
+  }
+
+  throw new Error(
+    "Firebase service account credentials are missing. Set FIREBASE_SERVICE_ACCOUNT (JSON) or FIREBASE_SERVICE_ACCOUNT_PATH to a valid service account key file."
+  );
+};
 
 const initializeFirebaseAdmin = () => {
   if (firebaseApp) {
     return firebaseApp;
   }
 
-  try {
-    const serviceAccountJson =
-      process.env.FIREBASE_SERVICE_ACCOUNT;
+  const serviceAccount = loadServiceAccount();
 
-    if (!serviceAccountJson) {
-      throw new Error(
-        "FIREBASE_SERVICE_ACCOUNT environment variable is missing."
-      );
-    }
+  firebaseApp = admin.initializeApp({
+    credential: admin.cert(serviceAccount),
+  });
 
-    const serviceAccount = JSON.parse(serviceAccountJson);
+  console.log("Firebase Admin initialized successfully.");
 
-    firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-
-    console.log("Firebase Admin initialized successfully.");
-
-    return firebaseApp;
-  } catch (error) {
-    console.error("Firebase Admin initialization error:", error);
-    throw error;
-  }
+  return firebaseApp;
 };
 
 const verifyFirebaseIdToken = async (idToken) => {

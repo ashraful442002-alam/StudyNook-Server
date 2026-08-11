@@ -1,43 +1,53 @@
+const fs = require("fs");
+const path = require("path");
 const admin = require("firebase-admin");
 
 let firebaseApp = null;
+
+const loadServiceAccount = () => {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+
+  if (serviceAccountJson) {
+    try {
+      const parsed = JSON.parse(serviceAccountJson);
+      if (parsed.project_id && parsed.client_email && parsed.private_key) {
+        return parsed;
+      }
+    } catch (error) {
+      console.warn(
+        "FIREBASE_SERVICE_ACCOUNT is not valid JSON, falling back to file path..."
+      );
+    }
+  }
+
+  if (serviceAccountPath) {
+    const resolvedPath = path.isAbsolute(serviceAccountPath)
+      ? serviceAccountPath
+      : path.resolve(process.cwd(), serviceAccountPath);
+
+    if (fs.existsSync(resolvedPath)) {
+      const parsed = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+      if (parsed.project_id && parsed.client_email && parsed.private_key) {
+        return parsed;
+      }
+    }
+  }
+
+  throw new Error(
+    "Firebase service account credentials are missing. Set FIREBASE_SERVICE_ACCOUNT (JSON) or FIREBASE_SERVICE_ACCOUNT_PATH to a valid service account key file."
+  );
+};
 
 const initializeFirebaseAdmin = () => {
   if (firebaseApp) {
     return firebaseApp;
   }
 
-  const serviceAccountJson =
-    process.env.FIREBASE_SERVICE_ACCOUNT;
-
-  if (!serviceAccountJson) {
-    throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT is missing from environment variables."
-    );
-  }
-
-  let serviceAccount;
-
-  try {
-    serviceAccount = JSON.parse(serviceAccountJson);
-  } catch (error) {
-    throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT contains invalid JSON."
-    );
-  }
-
-  if (
-    !serviceAccount.project_id ||
-    !serviceAccount.client_email ||
-    !serviceAccount.private_key
-  ) {
-    throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT is missing project_id, client_email, or private_key."
-    );
-  }
+  const serviceAccount = loadServiceAccount();
 
   firebaseApp = admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.cert(serviceAccount),
   });
 
   console.log(
