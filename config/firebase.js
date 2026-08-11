@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
+const { getAuth } = require("firebase-admin/auth");
 
 let firebaseApp;
 
@@ -59,9 +60,7 @@ const verifyFirebaseIdToken = async (idToken) => {
   try {
     const app = initializeFirebaseAdmin();
 
-    const decodedToken = await admin
-      .auth(app)
-      .verifyIdToken(idToken);
+    const decodedToken = await getAuth(app).verifyIdToken(idToken);
 
     return decodedToken;
   } catch (error) {
