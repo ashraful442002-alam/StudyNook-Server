@@ -1,77 +1,50 @@
-const fs = require("fs");
-const path = require("path");
-
 const admin = require("firebase-admin");
 
+let firebaseApp;
+
 const initializeFirebaseAdmin = () => {
-  if (admin.apps.length) {
-    return admin;
+  if (firebaseApp) {
+    return firebaseApp;
   }
 
-  const serviceAccountPath =
-    process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  try {
+    const serviceAccountJson =
+      process.env.FIREBASE_SERVICE_ACCOUNT;
 
-  const serviceAccountJson =
-    process.env.FIREBASE_SERVICE_ACCOUNT;
-
-  if (serviceAccountPath) {
-    const resolvedPath = path.resolve(serviceAccountPath);
-
-    if (!fs.existsSync(resolvedPath)) {
+    if (!serviceAccountJson) {
       throw new Error(
-        `Firebase service account file not found at: ${resolvedPath}`
+        "FIREBASE_SERVICE_ACCOUNT environment variable is missing."
       );
     }
 
-    const serviceAccount = require(resolvedPath);
+    const serviceAccount = JSON.parse(serviceAccountJson);
 
-    admin.initializeApp({
+    firebaseApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
 
-    return admin;
+    console.log("Firebase Admin initialized successfully.");
+
+    return firebaseApp;
+  } catch (error) {
+    console.error("Firebase Admin initialization error:", error);
+    throw error;
   }
-
-  if (serviceAccountJson) {
-    let serviceAccount;
-
-    try {
-      serviceAccount = JSON.parse(serviceAccountJson);
-    } catch (error) {
-      throw new Error(
-        "FIREBASE_SERVICE_ACCOUNT must be a valid JSON string."
-      );
-    }
-
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-
-    return admin;
-  }
-
-  if (process.env.FIREBASE_PROJECT_ID) {
-    admin.initializeApp({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-    });
-
-    return admin;
-  }
-
-  throw new Error(
-    "Firebase admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_PATH, FIREBASE_SERVICE_ACCOUNT, GOOGLE_APPLICATION_CREDENTIALS or FIREBASE_PROJECT_ID in server/.env"
-  );
 };
 
 const verifyFirebaseIdToken = async (idToken) => {
-  const admin = initializeFirebaseAdmin();
+  try {
+    const app = initializeFirebaseAdmin();
 
-  const decodedToken = await admin
-    .auth()
-    .verifyIdToken(idToken);
+    const decodedToken = await admin
+      .auth(app)
+      .verifyIdToken(idToken);
 
-  return decodedToken;
+    return decodedToken;
+  } catch (error) {
+    console.error("Firebase token verification error:", error);
+    throw error;
+  }
 };
 
 module.exports = {

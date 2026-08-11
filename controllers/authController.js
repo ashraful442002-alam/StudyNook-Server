@@ -4,7 +4,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const {
   verifyFirebaseIdToken,
-} = require("../config/firebase");
+} = require("../config/firebaseAdmin");
 
 const createToken = (userId) => {
   return jwt.sign(
