@@ -1,65 +1,69 @@
-const fs = require("fs");
-const path = require("path");
 const admin = require("firebase-admin");
 
+let firebaseApp = null;
+
 const initializeFirebaseAdmin = () => {
-  if (admin.apps.length) {
-    return admin;
+  if (firebaseApp) {
+    return firebaseApp;
   }
 
-  // Production: Render environment variable
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      const serviceAccount = JSON.parse(
-        process.env.FIREBASE_SERVICE_ACCOUNT
-      );
+  const serviceAccountJson =
+    process.env.FIREBASE_SERVICE_ACCOUNT;
 
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
-
-      return admin;
-    } catch (error) {
-      console.error(
-        "Firebase service account JSON error:",
-        error
-      );
-
-      throw new Error(
-        "Invalid FIREBASE_SERVICE_ACCOUNT JSON."
-      );
-    }
-  }
-
-  // Local development: service-account-key.json
-  const serviceAccountPath = path.join(
-    __dirname,
-    "service-account-key.json"
-  );
-
-  if (fs.existsSync(serviceAccountPath)) {
-    const serviceAccount = require(
-      serviceAccountPath
+  if (!serviceAccountJson) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT is missing from environment variables."
     );
-
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-
-    return admin;
   }
 
-  throw new Error(
-    "Firebase Admin is not configured."
+  let serviceAccount;
+
+  try {
+    serviceAccount = JSON.parse(serviceAccountJson);
+  } catch (error) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT contains invalid JSON."
+    );
+  }
+
+  if (
+    !serviceAccount.project_id ||
+    !serviceAccount.client_email ||
+    !serviceAccount.private_key
+  ) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT is missing project_id, client_email, or private_key."
+    );
+  }
+
+  firebaseApp = admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+
+  console.log(
+    `Firebase Admin initialized for project: ${serviceAccount.project_id}`
   );
+
+  return firebaseApp;
 };
 
 const verifyFirebaseIdToken = async (idToken) => {
-  const firebaseAdmin = initializeFirebaseAdmin();
+  try {
+    const app = initializeFirebaseAdmin();
 
-  return await firebaseAdmin
-    .auth()
-    .verifyIdToken(idToken);
+    const decodedToken = await admin
+      .auth(app)
+      .verifyIdToken(idToken);
+
+    return decodedToken;
+  } catch (error) {
+    console.error(
+      "Firebase token verification error:",
+      error
+    );
+
+    throw error;
+  }
 };
 
 module.exports = {
